@@ -247,8 +247,9 @@ survives a container restart and stays acceptable, a running one is
 reported as failed.
 
 If a required variable is missing, only the start of a run (`POST
-/api/campaigns/:campaign/generator-jobs` or `POST …/augment`) and a scene
-chat message (`POST …/scene-chats/<chat>/messages`) respond with
+/api/campaigns/:campaign/generator-jobs` or `POST …/augment`), a scene
+chat message (`POST …/scene-chats/<chat>/messages`) and a quick-ideas
+question (`POST …/sessions/<session>/quick-ideas`) respond with
 `503` (`code: "llm_unconfigured"`) and a plain-text message in the `error` field naming the missing
 variable (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, or `LLM_MODEL` with an
 example value such as `anthropic/claude-sonnet-5`); the provider is

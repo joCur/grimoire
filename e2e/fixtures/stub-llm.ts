@@ -52,6 +52,12 @@
 //     TRIGGER.latePart in it -> the reply answers late (LATE_REPLY_MS).
 //     Checked first, because the chat's context block carries a scene with
 //     its `chapter` field
+//   - the system prompt is the QUICK-IDEAS prompt             -> a quick-ideas
+//     reply: the chat reply's echo plus the session's log lines from the
+//     context block (`quickIdeasReply`); TRIGGER.truncated and
+//     TRIGGER.latePart in the DM's question as for the chat, and
+//     TRIGGER.partFail:<nonce> in it -> cut off the FIRST time that nonce is
+//     asked, answered from then on
 //
 // A SCENE run is not one call but a pipeline, and the stub answers each of its
 // calls (told apart by the prompt):
@@ -462,12 +468,69 @@ export function chatReply(messages: ChatMessage[]): string {
   ].join("\n");
 }
 
+/** The system prompt of a quick-ideas question (generator/quick-ideas-system-prompt.md). */
+const QUICK_IDEAS_SYSTEM_HEADING = "# System-Prompt: Schnelle Ideen";
+
+/**
+ * The heading of the session's log lines in a quick-ideas context block,
+ * spelled as server/src/quick-ideas-reply.ts writes it — duplicated on
+ * purpose, like KNOWLEDGE_HEADING.
+ */
+const QUICK_IDEAS_LOG_HEADING = "## Notizen dieser Session";
+
+/**
+ * The Markdown reply of a quick-ideas question: it echoes the open scene, its
+ * npcs and its location by their ids and the session's log lines from the
+ * context block, and names the DM's last message and how many turns came
+ * along, so a spec sees that the context and the conversation reached the
+ * model.
+ */
+export function quickIdeasReply(messages: ChatMessage[]): string {
+  const context = firstUserPrompt(messages);
+  const start = context.indexOf(QUICK_IDEAS_LOG_HEADING);
+  const log =
+    start === -1
+      ? []
+      : context
+          .slice(start + QUICK_IDEAS_LOG_HEADING.length)
+          .split(/\n## /)[0]!
+          .trim()
+          .split("\n")
+          .map((line) => line.replace(/^- /, ""));
+  return [
+    chatReply(messages).split("\n### ")[0]!.replace("## Stub reply", "## Stub idea"),
+    "### Log lines in the context",
+    "",
+    ...(log.length === 0 ? ["(none)"] : log.map((line) => `- ${line}`)),
+  ].join("\n");
+}
+
 /** The whole stub logic: prompt in, canned reply out. Exported for reuse. */
 export function decide(messages: ChatMessage[]): StubDecision {
   const prompt = firstUserPrompt(messages);
   const system = systemPrompt(messages);
   // A scene chat reply is free Markdown, no schema; the DM's message says
   // whether it comes cut off.
+  // A quick-ideas question is free Markdown too; the DM's question says
+  // whether it comes late, cut off, or cut off only the first time its nonce
+  // is asked (TRIGGER.partFail:<nonce>, so the retry gets the reply).
+  if (system.includes(QUICK_IDEAS_SYSTEM_HEADING)) {
+    const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    const nonce = partFailNonce(last);
+    let failsOnce = false;
+    if (nonce !== "") {
+      const key = `quick-ideas:${nonce}`;
+      partCalls.set(key, (partCalls.get(key) ?? 0) + 1);
+      failsOnce = partCalls.get(key) === 1;
+    }
+    return {
+      kind: "chat",
+      truncated: failsOnce || last.includes(TRIGGER.truncated),
+      delayMs: 0,
+      pauseMs: last.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0,
+      reply: quickIdeasReply(messages),
+    };
+  }
   if (system.includes(CHAT_SYSTEM_HEADING)) {
     const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
     return {

@@ -102,7 +102,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   page of a session gets the link of a scene, the live view's next-scene
   step gets setting the scene status; scene, NPC and location get
   their augment action from the generator job, the scene its brainstorming
-  chat from the scene chat; the random tables page gets
+  chat from the scene chat, the live view its quick-ideas chat from the
+  session; the random tables page gets
   what a rolled result becomes). Whatever connects two slices
   lives with the page that composes them (the reminders of the live view
   from log lines and ideas in `routes/PcReminders.tsx`, the augment actions
@@ -184,6 +185,10 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `PATCH …/sessions/<id> { rev, endedMs }` ends, `DELETE` discards an empty
   one. The client writes a point in time as an epoch value (`…Ms`); the
   server derives the zoneless local time from it.
+  `POST …/sessions/<id>/quick-ideas { scene, messages }` asks the model a
+  question at the table and answers `{ text }` in the same request; nothing
+  of it is stored (decisions/generator), and an ended session is 409
+  `session_ended`.
 - The generator job is its own resource, at most one per campaign:
   `POST …/generator-jobs { kind, … }` starts a scene run, an NPC run or a
   chapter check (`{ kind: "chapter-check", chapter }`; an augment run starts
@@ -565,6 +570,23 @@ The paths:
     first (`DELETE …/scene-chats/<id> { rev }`) and puts the chat in the
     trash as one row, and the trash page restores it (`PATCH …/scene-chats/<id>
     { rev, deletedMs: null }`). The sheet fits 390px
+15. Quick-ideas chat (decisions/generator): the live view of a running
+    session (`/campaigns/:id/live`, desktop) opens its quick-ideas chat from
+    the same button at the bottom right — left of the aside, so nothing
+    covers the quick note — as a popup above the page, which docks as a side
+    panel at the right (the page narrows, nothing covers the open scene) and
+    back; Esc closes the popup and the focus returns to the button. Asking
+    (`POST …/sessions/<id>/quick-ideas { scene, messages }`, answered
+    `{ text }` in the same request) shows the DM's question at once and the
+    reply as running, with the send action disabled until it stands; the
+    stub LLM's reply echoes the context block — the open scene, its NPC, its
+    location and the session's log lines — rendered as Markdown with its
+    `[[id]]` resolved and a copy action; a second question sees the whole
+    conversation, and after the next-scene step the next question carries
+    the new scene. A reply cut off at the output cap says why in a whole
+    sentence, keeps the DM's question and is asked for again. Nothing is
+    stored: the session's rows stay as they were, and a reload starts the
+    chat empty
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

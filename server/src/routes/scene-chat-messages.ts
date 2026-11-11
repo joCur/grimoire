@@ -11,7 +11,8 @@
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";
-import { obtainChatProvider, startSceneChatReply } from "../scene-chat-reply";
+import { obtainChatProvider } from "../chat-reply";
+import { startSceneChatReply } from "../scene-chat-reply";
 import {
   createSceneChatMessage,
   readSceneChatMessageCreate,

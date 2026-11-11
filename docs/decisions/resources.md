@@ -45,7 +45,10 @@ general endpoint across several entities, neither in the API nor in the app.
 
 A state is a field: a change is a `PATCH`, a beginning a `POST`, a discard a
 `DELETE`. There are no action endpoints. A question such as "which one is
-running" is a filter on the list, not a separate endpoint.
+running" is a filter on the list, not a separate endpoint. A request that
+changes no state and whose input does not fit a URL — a question to the
+language model about what the DM has open — is a `POST` under the entity it
+is asked in; it answers with what it computed and writes nothing.
 
 ### Orders
 

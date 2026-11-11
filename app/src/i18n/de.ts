@@ -499,6 +499,39 @@ export const de = {
     "Die Liste ließ sich nicht entfernen, weil sie sich inzwischen geändert hat. Die Seite zeigt jetzt ihren aktuellen Stand.",
 
 
+  // --- the shared parts of a chat with the model (components/ChatPanel.tsx,
+  // components/ChatMessage.tsx) ------------------------------------------
+  "chat.role.dm": "Du",
+  "chat.role.model": "Antwort",
+  "chat.running": "Die Antwort wird geschrieben …",
+  "chat.failed.fallback": "Die Antwort ließ sich nicht schreiben.",
+  "chat.failed.hint": "Deine Nachricht bleibt stehen, und die Antwort lässt sich noch einmal anfordern.",
+  "chat.retry": "Noch einmal versuchen",
+  "chat.copy": "Kopieren",
+  "chat.copied": "Kopiert",
+  "chat.copy.aria": "Antwort kopieren",
+  "chat.copied.aria": "Antwort kopiert",
+  "chat.input.label": "Deine Nachricht",
+  "chat.send": "Senden",
+  "chat.sending": "Wird gesendet …",
+  "chat.close": "Chat schließen",
+  "chat.expand": "Als Seitenleiste andocken",
+  "chat.collapse": "Wieder als Fenster öffnen",
+
+  // --- the quick-ideas chat of the live view (session/QuickIdeas.tsx) --------
+  "quickIdeas.heading": "Schnelle Ideen",
+  "quickIdeas.lead":
+    "Frag nach einer Idee für den Tisch. Jede Antwort liest die offene Szene, ihre NPCs, ihren Ort, das Kapitel, das Kampagnenwissen, das Glossar und die Notizen dieser Session so, wie sie gerade gespeichert sind.",
+  "quickIdeas.empty":
+    "Noch keine Frage. Das Gespräch wird nicht gespeichert: Es endet, wenn du die Seite neu lädst oder die Live-Ansicht verlässt.",
+  "quickIdeas.log": "Schnelle Ideen zu dieser Session",
+  "quickIdeas.input.placeholder": "Frag nach einem Namen, einer Wendung, einer Reaktion …",
+  "quickIdeas.open": "Schnelle Ideen öffnen",
+  "quickIdeas.open.running": "Schnelle Ideen öffnen — eine Antwort wird gerade geschrieben",
+  "quickIdeas.ended":
+    "Diese Session ist schon beendet, deshalb beantwortet der Chat keine Frage mehr. Starte eine neue Session, um weiterzufragen.",
+  "quickIdeas.unreachable": "Die Frage hat den Server nicht erreicht — Server prüfen.",
+
   // --- the brainstorming chat of a scene (scene-chat/SceneChat.tsx) ----------
   "sceneChat.heading": "Brainstorming",
   "sceneChat.lead":
@@ -507,31 +540,15 @@ export const de = {
   "sceneChat.loadFailed": "Der Chat konnte nicht geladen werden — Server prüfen.",
   "sceneChat.empty": "Noch keine Nachricht. Stell eine Frage zu dieser Szene, um das Gespräch zu beginnen.",
   "sceneChat.log": "Gespräch zu dieser Szene",
-  "sceneChat.role.dm": "Du",
-  "sceneChat.role.model": "Antwort",
-  "sceneChat.running": "Die Antwort wird geschrieben …",
   "sceneChat.running.hint":
     "Du kannst die Seite verlassen. Die Antwort steht hier, wenn du zurückkommst.",
-  "sceneChat.failed.fallback": "Die Antwort ließ sich nicht schreiben.",
-  "sceneChat.failed.hint": "Deine Nachricht bleibt stehen, und die Antwort lässt sich noch einmal anfordern.",
-  "sceneChat.retry": "Noch einmal versuchen",
   "sceneChat.retry.failed": "Die Antwort wurde nicht neu angefordert — Server prüfen.",
-  "sceneChat.copy": "Kopieren",
-  "sceneChat.copied": "Kopiert",
-  "sceneChat.copy.aria": "Antwort kopieren",
-  "sceneChat.copied.aria": "Antwort kopiert",
-  "sceneChat.input.label": "Deine Nachricht",
   "sceneChat.input.placeholder": "Frag etwas zu dieser Szene …",
-  "sceneChat.send": "Senden",
-  "sceneChat.sending": "Wird gesendet …",
   "sceneChat.send.failed": "Die Nachricht wurde nicht gesendet — Server prüfen.",
   "sceneChat.unconfigured":
     "Auf diesem Server ist kein Sprachmodell eingerichtet, deshalb kann der Chat nicht antworten. Sobald ein Anbieter eingerichtet ist, kannst du hier schreiben.",
   "sceneChat.open": "Brainstorming zu dieser Szene öffnen",
   "sceneChat.open.running": "Brainstorming zu dieser Szene öffnen — eine Antwort wird gerade geschrieben",
-  "sceneChat.close": "Chat schließen",
-  "sceneChat.expand": "Als Seitenleiste andocken",
-  "sceneChat.collapse": "Wieder als Fenster öffnen",
   "sceneChat.clear": "Chat leeren",
   "sceneChat.clear.title": "Diesen Chat leeren?",
   "sceneChat.clear.sentence":
@@ -617,6 +634,8 @@ export const de = {
     "Der Anbieter des Sprachmodells hat mit einem Fehler geantwortet oder war nicht erreichbar.",
   "server.llm_timeout": "Der Anbieter des Sprachmodells hat nicht rechtzeitig geantwortet.",
   "server.scene_chat_reply_truncated":
+    "Die Antwort wurde am Ausgabelimit abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}).",
+  "server.quick_ideas_reply_truncated":
     "Die Antwort wurde am Ausgabelimit abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}).",
   "server.scene_chat_reply_restarted":
     "Der Server wurde neu gestartet, während die Antwort geschrieben wurde.",

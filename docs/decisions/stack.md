@@ -26,6 +26,12 @@ Registered:
 - **`bun:sqlite`, as the fallback of the database driver.** The driver uses
   `node:sqlite` where the runtime offers it and `bun:sqlite` otherwise, both
   behind one interface with identical behavior, proven on both runtimes in CI.
+- **The idle timeout of Bun's server, raised to its maximum.** Bun closes a
+  connection that stays silent for ten seconds, and a request that waits on
+  the language model inside it — a question that is answered at once and
+  stored nowhere — stays silent much longer. The option sits beside the port
+  in the server's default export; Node's server already keeps a request open
+  longer than such a reply may take, so on Node it has no counterpart.
 
 ## Why
 

@@ -129,8 +129,9 @@ export const ERROR_CODES = [
   /** 422, generator: the reply failed mechanical validation after the retries. */
   "llm_invalid",
   /**
-   * 422, generator: the model declined to answer. `{ reason? }` — the
-   * reason the API gave, absent when it gave none.
+   * 422, generator: the model declined to answer — also the reason a scene
+   * chat reply failed, and the 422 of a quick-ideas question. `{ reason? }` —
+   * the reason the API gave, absent when it gave none.
    */
   "llm_refused",
   /**
@@ -163,7 +164,8 @@ export const ERROR_CODES = [
   "glossary_term_taken",
   /**
    * 409, a write that needs a running session — a log entry or a pause — on
-   * one that is ended. Nothing is written. `{ id }`
+   * one that is ended, and a quick-ideas question to an ended session.
+   * Nothing is written. `{ id }`
    */
   "session_ended",
   /**
@@ -220,18 +222,22 @@ export const ERROR_CODES = [
   "import_no_tables",
   /**
    * 503, a request that needs the model while no LLM provider is configured
-   * (a generator run, a scene chat message). Nothing is written. No
-   * parameters.
+   * (a generator run, a scene chat message, a quick-ideas question). Nothing
+   * is written. No parameters.
    */
   "llm_unconfigured",
   /**
    * A scene chat reply that failed: the provider answered with an error, could
    * not be reached, or sent an empty reply. Stored on the reply as its error
-   * body. `{ status }` when the provider answered with an HTTP error — data,
-   * not part of the sentence.
+   * body. The same reason is the 502 of a quick-ideas question. `{ status }`
+   * when the provider answered with an HTTP error — data, not part of the
+   * sentence.
    */
   "llm_failed",
-  /** A scene chat reply that failed: the provider did not answer in time. No parameters. */
+  /**
+   * A scene chat reply that failed, or the 504 of a quick-ideas question: the
+   * provider did not answer in time. No parameters.
+   */
   "llm_timeout",
   /**
    * A scene chat reply that failed: it hit the output cap and is cut off.
@@ -260,6 +266,12 @@ export const ERROR_CODES = [
    * read. Nothing is written. `{ kind, id }`.
    */
   "fix_row_changed",
+  /**
+   * 422, a quick-ideas question: the reply hit the output cap and is cut
+   * off. Nothing is stored. `{ maxTokens }` — absent when the endpoint's own
+   * default applies.
+   */
+  "quick_ideas_reply_truncated",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

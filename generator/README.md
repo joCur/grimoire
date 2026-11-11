@@ -6,9 +6,9 @@ Pipeline: source text (EN) → LLM → proposed scenes (DE) → review → datab
 
 **Every reply of a run is a JSON object, and every object is enforced by a
 schema.** That is the whole contract: the provider sends the schema along and
-the interface guarantees the shape before the server reads it. The one reply
-outside it is the scene chat's (see "Scene chat" below): free Markdown,
-because it is never written into a row.
+the interface guarantees the shape before the server reads it. The replies
+outside it are the chats' (see "Scene chat" and "Quick-ideas chat" below):
+free Markdown, because they are never written into a row.
 
 * **Claude**: the schema travels as structured output
   (`output_config.format`, `type: "json_schema"`), its description inside the
@@ -197,6 +197,7 @@ in `server/src/generator.ts`); no code looks for a heading inside a file.
 | patch | `patch-system-prompt.md`, then the part's entity's fields file |
 | extension | `extend-system-prompt.md`, then the entity's fields file |
 | scene chat | `scene-chat-system-prompt.md`, then one line naming the DM's UI language |
+| quick-ideas chat | `quick-ideas-system-prompt.md`, then one line naming the DM's UI language |
 | chapter check: one row's terms | `check-terms-system-prompt.md` |
 | chapter check: merge | `check-merge-system-prompt.md` |
 | chapter check: fix of one row | `check-fix-system-prompt.md`, then the row's entity's fields file |
@@ -627,8 +628,8 @@ Abstraction in `server/src/llm-provider.ts`, chosen by the env var
 The three OpenAI-compatible cases share one class (`OpenAICompatProvider`);
 they differ only in base URL, model and auth header. Missing required
 variables and an unknown `LLM_PROVIDER` value are not swallowed: starting a
-run (`POST /api/campaigns/:campaign/generator-jobs`) or sending a scene chat
-message answers `503` with `code: "llm_unconfigured"` and the message as its
+run (`POST /api/campaigns/:campaign/generator-jobs`), sending a scene chat
+message or asking a quick-ideas question answers `503` with `code: "llm_unconfigured"` and the message as its
 `error`. Full variable table: docs/DEPLOYMENT.md section 2.
 
 ## Scene chat
@@ -661,6 +662,30 @@ endpoint gets the same markers when `LLM_PROMPT_CACHE` switches them on.
 A reply that is cut off at the output cap, empty, refused by the provider,
 not there within five minutes, or interrupted by a restart fails with its
 reason; the DM's message stays and the reply can be retried.
+
+## Quick-ideas chat
+
+The quick-ideas chat of a running session (README.md, "Quick-ideas chat")
+is not a run either, and it is not stored: the live view holds the
+conversation and sends it whole with every question, and the server answers
+in the same request. Like the scene chat's, its request carries no schema,
+no tool and no response format. Every question sends:
+
+1. the system prompt — `quick-ideas-system-prompt.md` (short, precise
+   replies in the form the question asks for) and the sentence that sets
+   the reply language;
+2. the CONTEXT block as the first user turn, read from the campaign at that
+   moment: the blocks the scene chat sends for the scene open in the live
+   view, then the session's log lines so far under `## Notizen dieser
+   Session`, one line per note with its time, its scene and its text — last,
+   because they grow during the evening while everything above stays;
+3. the conversation, the DM's questions as user turns and the replies as
+   assistant turns; a reply that failed is no turn.
+
+The context carries the same cache breakpoints as the scene chat's. A reply
+that is cut off at the output cap, empty, refused, or not there within four
+minutes — less than the server keeps a silent connection open — answers its
+reason as an error; nothing is written, and the DM asks again.
 
 ## Chapter check
 

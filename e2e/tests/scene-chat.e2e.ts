@@ -45,7 +45,7 @@ function opener(page: Page) {
 }
 
 function input(page: Page) {
-  return chat(page).getByRole("textbox", { name: ui("sceneChat.input.label") });
+  return chat(page).getByRole("textbox", { name: ui("chat.input.label") });
 }
 
 function messages(page: Page) {
@@ -56,7 +56,7 @@ function reply(page: Page, index: number) {
   return chat(page).locator('[data-testid="scene-chat-message"][data-role="model"]').nth(index);
 }
 
-function action(page: Page, key: "sceneChat.expand" | "sceneChat.collapse" | "sceneChat.clear" | "sceneChat.close") {
+function action(page: Page, key: "chat.expand" | "chat.collapse" | "sceneChat.clear" | "chat.close") {
   return chat(page).getByRole("button", { name: ui(key), exact: true });
 }
 
@@ -67,7 +67,7 @@ async function openChat(page: Page): Promise<void> {
 
 async function send(page: Page, text: string): Promise<void> {
   await input(page).fill(text);
-  await chat(page).getByRole("button", { name: ui("sceneChat.send"), exact: true }).click();
+  await chat(page).getByRole("button", { name: ui("chat.send"), exact: true }).click();
 }
 
 test("a message gets a reply from the scene's context; the chat docks, survives a reload, is cleared and restored", async ({
@@ -92,9 +92,9 @@ test("a message gets a reply from the scene's context; the chat docks, survives 
   await send(page, `What does Fenn want? ${TRIGGER.latePart}`);
   await expect(messages(page).first()).toHaveAttribute("data-role", "dm");
   await expect(reply(page, 0)).toHaveAttribute("data-status", "running");
-  await expect(reply(page, 0)).toContainText(ui("sceneChat.running"));
+  await expect(reply(page, 0)).toContainText(ui("chat.running"));
   await input(page).fill("And then?");
-  await expect(chat(page).getByRole("button", { name: ui("sceneChat.send"), exact: true })).toBeDisabled();
+  await expect(chat(page).getByRole("button", { name: ui("chat.send"), exact: true })).toBeDisabled();
 
   // --- the reply stands, rendered, from the context as it is stored --------
   await expect(reply(page, 0)).toHaveAttribute("data-status", "done", { timeout: 20_000 });
@@ -107,12 +107,12 @@ test("a message gets a reply from the scene's context; the chat docks, survives 
   await expect(
     first.getByRole("link", { name: ui("markdown.ref.aria", { kind: ui("kind.npc"), name: "Fenn" }) }),
   ).toHaveAttribute("href", "/campaigns/example/npcs/fenn");
-  await first.getByRole("button", { name: ui("sceneChat.copy.aria") }).click();
-  await expect(first.getByRole("button", { name: ui("sceneChat.copied.aria") })).toBeVisible();
+  await first.getByRole("button", { name: ui("chat.copy.aria") }).click();
+  await expect(first.getByRole("button", { name: ui("chat.copied.aria") })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("[[fenn]]");
 
   // --- the conversation goes on: the second reply sees the first ------------
-  await chat(page).getByRole("button", { name: ui("sceneChat.send"), exact: true }).click();
+  await chat(page).getByRole("button", { name: ui("chat.send"), exact: true }).click();
   await expect(reply(page, 1)).toHaveAttribute("data-status", "done", { timeout: 20_000 });
   await expect(reply(page, 1)).toContainText("Messages: 4");
   const stored = await getSceneChat(api, SCENE);
@@ -124,7 +124,7 @@ test("a message gets a reply from the scene's context; the chat docks, survives 
   ]);
 
   // --- docked as a side panel: the page narrows, nothing is covered --------
-  await action(page, "sceneChat.expand").click();
+  await action(page, "chat.expand").click();
   await expect(page).toHaveURL(/[?&]chat=side$/);
   await expect(chat(page)).toHaveAttribute("data-mode", "side");
   const panel = (await chat(page).boundingBox())!;
@@ -138,7 +138,7 @@ test("a message gets a reply from the scene's context; the chat docks, survives 
   await expect(reply(page, 0)).toContainText(FACT);
 
   // --- back to the popup; Esc closes it and the button has the focus --------
-  await action(page, "sceneChat.collapse").click();
+  await action(page, "chat.collapse").click();
   await expect(chat(page)).toHaveAttribute("data-mode", "popup");
   await input(page).focus();
   await page.keyboard.press("Escape");
@@ -180,7 +180,7 @@ test("a failed reply says why in a whole sentence and keeps the DM's message", a
     ui("server.scene_chat_reply_truncated", { max: ui("server.llm_truncated.defaultCap") }),
   );
   await expect(messages(page).first()).toContainText("Cut this one off.");
-  await expect(reply(page, 0).getByRole("button", { name: ui("sceneChat.retry") })).toBeEnabled();
+  await expect(reply(page, 0).getByRole("button", { name: ui("chat.retry") })).toBeEnabled();
   const stored = await getSceneChat(api, SCENE);
   expect(stored?.messages.map((message) => message.status)).toEqual(["done", "failed"]);
 });
@@ -190,16 +190,16 @@ test("on the phone the chat is a sheet from the bottom, without a side panel", a
   await page.goto(SCENE_URL);
   await openChat(page);
   await expect(chat(page)).toHaveAttribute("data-mode", "sheet");
-  await expect(action(page, "sceneChat.expand")).toHaveCount(0);
+  await expect(action(page, "chat.expand")).toHaveCount(0);
   await send(page, "What does Fenn want?");
   await expect(reply(page, 0)).toHaveAttribute("data-status", "done", { timeout: 20_000 });
-  await expect(chat(page).getByRole("button", { name: ui("sceneChat.send"), exact: true })).toBeVisible();
+  await expect(chat(page).getByRole("button", { name: ui("chat.send"), exact: true })).toBeVisible();
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
   // A reload keeps the sheet open; closing it takes the parameter away.
   await page.reload();
   await expect(chat(page)).toHaveAttribute("data-mode", "sheet");
-  await action(page, "sceneChat.close").click();
+  await action(page, "chat.close").click();
   await expect(chat(page)).toHaveCount(0);
   await expect(page).not.toHaveURL(/chat=/);
 });

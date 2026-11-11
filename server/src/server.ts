@@ -5,8 +5,9 @@
 // per resource (./routes/<resource>.ts), assembled in ./routes/api.ts, one
 // comment per endpoint, no second list.
 //
-// Runs on Bun (bun run src/server.ts). No Bun-only runtime APIs are used
-// (decisions/stack): Bun picks up the default { port, fetch } export below;
+// Runs on Bun (bun run src/server.ts). The one Bun-only option is the idle
+// timeout of the default export (decisions/stack): Bun picks up the default
+// { port, idleTimeout, fetch } export below;
 // on Node >= 20 the same app runs via @hono/node-server instead:
 //   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 
@@ -89,9 +90,20 @@ if (import.meta.main) {
   }
 }
 
+/**
+ * Seconds a connection may stay silent before the server closes it — Bun's
+ * own default is ten, too short for a quick-ideas question, which waits on
+ * the model inside its request (../quick-ideas-reply.ts). 255 is the most Bun
+ * allows; the reply's own timeout stays below it. A registered Bun-only
+ * option (decisions/stack): Node's server keeps a request open for five
+ * minutes by default, longer than the reply waits.
+ */
+const IDLE_TIMEOUT_SECONDS = 255;
+
 // Bun serves this automatically when this file is the entrypoint; the app
 // object itself stays runtime-neutral (see Node alternative above).
 export default {
   port: PORT,
+  idleTimeout: IDLE_TIMEOUT_SECONDS,
   fetch: app.fetch,
 };

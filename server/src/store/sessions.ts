@@ -35,6 +35,7 @@ import { getDb } from "./handle";
 import { insertLogEntrySeed, sessionLog } from "./log-entries";
 import { closeOpenPause, insertPauseSeed, sessionPauses } from "./pauses";
 import {
+  requireRunningSessionRow,
   requireSessionRow,
   runningSessionRow,
   sessionRowsNewestFirst,
@@ -99,6 +100,17 @@ export async function readSession(campaign: string, id: string): Promise<Session
   await requireCampaign(campaign);
   const db = await getDb();
   return renderSession(db, campaign, requireSessionRow(db, campaign, id));
+}
+
+/**
+ * The session with this id, which has to be RUNNING — what a question asked
+ * during the evening reads. 404 for an unknown id, 409 `session_ended` for an
+ * ended session.
+ */
+export async function readRunningSession(campaign: string, id: string): Promise<Session> {
+  await requireCampaign(campaign);
+  const db = await getDb();
+  return renderSession(db, campaign, requireRunningSessionRow(db, campaign, id));
 }
 
 /** The sessions of a campaign as the campaign tree lists them, newest first. */

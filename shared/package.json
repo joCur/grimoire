@@ -33,6 +33,7 @@
     "./log-entry": "./src/log-entry.ts",
     "./scene-chat": "./src/scene-chat.ts",
     "./scene-chat-message": "./src/scene-chat-message.ts",
+    "./quick-ideas": "./src/quick-ideas.ts",
     "./llm-provider": "./src/llm-provider.ts",
     "./pause": "./src/pause.ts",
     "./generator-job": "./src/generator-job.ts",

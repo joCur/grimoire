@@ -827,6 +827,8 @@ embedded — each with its own `id` and its own `rev`:
   note alone and ending the session change no status.
 - The reading page of a session shows the scenes in which its log lines
   were noted — each once, in the order of its first note.
+- The live view of a running session has a **quick-ideas chat** (see
+  below); it is not part of the session's row.
 
 ### Pause
 
@@ -917,6 +919,40 @@ write moves the chat's `rev`.
 - A reply is no generator job: it counts against no limit of the campaign's
   job and waits for none.
 - The chat is not searched.
+
+### Quick-ideas chat
+
+The quick-ideas chat is the DM's conversation with the language model at
+the table, during a running session. It is **no entity and no resource**:
+nothing of it is stored, it lives only in the open live view, and a reload
+or leaving the live view ends it. The live view opens it from a button at
+the bottom right, left of the aside so that nothing covers the quick note:
+as a popup above the page, which docks as a side panel at the right while
+the page narrows (`?chat=popup` or `?chat=side`, like the scene chat).
+
+- `POST …/sessions/<session>/quick-ideas { scene, messages }` asks one
+  question (`QuickIdeasQuestion`, from `shared/src/quick-ideas.ts`): `scene`
+  is the scene open in the live view, `messages` the conversation so far as
+  `{ role, text }` with `role` `dm` or `model`, the DM's question last. It
+  answers `{ text }` (`QuickIdeasReply`), the reply as Markdown, in the same
+  request, and **writes nothing** on any path.
+- The reply reads its context **as it is stored at that moment**: the
+  campaign knowledge, the glossary, the text of the scene's chapter, the
+  scene with every field and its text, the NPCs it names, the location it
+  plays at, and the session's log lines so far. After the DM moves on to
+  another scene, the next question carries that scene. A reply is free
+  Markdown in the DM's UI language; `[[id]]` references in it resolve like
+  in every text, and in the live view they open the drawer.
+- An ended session takes no question (409 `session_ended`), and neither
+  does an empty conversation or one that does not end with the DM's
+  question (400). Without a configured provider it is 503
+  `llm_unconfigured`. A reply that cannot be used answers its reason — a
+  provider error or an empty reply (502 `llm_failed`), a timeout (504
+  `llm_timeout`), a refusal (422 `llm_refused`) or the output cap (422
+  `quick_ideas_reply_truncated`) —; the app says why in a whole sentence,
+  keeps the DM's question and offers to ask again.
+- The conversation is not searched and appears nowhere else — not in the
+  debrief, not on the session's reading page.
 
 ## Trash
 
@@ -1183,9 +1219,9 @@ since (409 `fix_row_changed`). A chapter without inconsistencies ends the
 check done and without parts, and nothing is written.
 
 **Every** call of a run responds with a JSON object whose schema the server
-**enforces** via the provider API — the one model reply that is free text is
-the scene chat's (see scene chat above), because it is never written into a
-row. A scene, NPC or location call (creating
+**enforces** via the provider API — the model replies that are free text are
+the scene chat's and the quick-ideas chat's (see above), because they are
+never written into a row. A scene, NPC or location call (creating
 as well as augmenting) returns the scene, the NPC or the location without
 `rev`, all fields side by side, plus the hints for the DM under `warnings`;
 a new scene is always `draft`, and an NPC's `quickstats` travel as a list of

@@ -68,6 +68,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   scene_chat_reply_running: "server.scene_chat_reply_running",
   scene_chat_replaced: "server.scene_chat_replaced",
   fix_row_changed: "server.fix_row_changed",
+  quick_ideas_reply_truncated: "server.quick_ideas_reply_truncated",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -225,7 +226,8 @@ function paramsFor(
       return detail === undefined ? undefined : { detail };
     }
     case "llm_truncated":
-    case "scene_chat_reply_truncated": {
+    case "scene_chat_reply_truncated":
+    case "quick_ideas_reply_truncated": {
       // No cap configured: the endpoint's own default, which has no number.
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };

@@ -18,13 +18,16 @@
 // session that runs past midnight keeps running.
 //
 // The page composes slices: the scenes, the npc and location cards, the
-// session's log, start prompt and "next scene" step, and the reminders that
-// join the session's log with the ideas (./PcReminders.tsx).
+// session's log, start prompt, "next scene" step and quick-ideas chat, and
+// the reminders that join the session's log with the ideas
+// (./PcReminders.tsx). The quick-ideas chat is handed the open scene's id,
+// so the next question after a scene switch carries the new scene.
 //
-// Client state is exactly two things: the selected scene and which entity the
-// detail drawer shows. Aside cards therefore do NOT navigate here
-// — a click would leave the live route and take the selected scene and the
-// half-typed quick note with it.
+// Client state is the selected scene, which entity the detail drawer shows,
+// and the quick-ideas conversation inside its chat (never stored). Aside
+// cards therefore do NOT navigate here — a click would leave the live route
+// and take the selected scene, the half-typed quick note and the
+// conversation with it.
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
@@ -51,6 +54,7 @@ import { sceneQuery } from "@/scene/scene-query";
 import { isSceneDone } from "@/scene/scene-status";
 import { useMarkScenePlayed } from "@/scene/use-scene-status";
 import { NextSceneStep } from "@/session/NextSceneStep";
+import { QuickIdeas } from "@/session/QuickIdeas";
 import { SessionLog } from "@/session/SessionLog";
 import { SessionStart } from "@/session/SessionStart";
 import { useRunningSession } from "@/session/use-session";
@@ -158,138 +162,157 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col max-lg:overflow-y-auto lg:flex-row">
-      <nav
-        aria-label={t("live.nav.aria")}
-        className="flex-none border-b border-border px-3 py-[18px] lg:w-[250px] lg:overflow-y-auto lg:border-b-0 lg:border-r"
-      >
-        {/* The chapter the session plays. The topbar carries one session
-            chip and nothing more, so the chapter title belongs here — next to
-            the scenes it describes. */}
-        {chapter !== undefined && (
-          <p className="px-2 pb-3 font-serif text-[14px] text-foreground">{chapter.title}</p>
-        )}
-        <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-          {t("scene.planned.heading")}
-        </p>
-        <div className="mb-6 flex flex-col gap-0.5">
-          {planned.map((scene) => (
-            <SceneNavRow
-              key={scene.id}
-              scene={scene}
-              active={scene.id === selected?.id}
-              onPick={() => setSelectedId(scene.id)}
-            />
-          ))}
-          {planned.length === 0 && (
-            <p className="px-2 text-[12.5px] text-muted-foreground">
-              {t("live.nav.noPlanned")}
-            </p>
+    // The quick-ideas chat is a sibling of the three zones: floating above
+    // them, or docked as a column at their right, where they narrow for it.
+    // Below lg the zones stack and scroll as one; the room at their end keeps
+    // the quick note clear of the chat's button.
+    <div className="flex h-full min-h-0">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col max-lg:overflow-y-auto max-lg:pb-24 lg:flex-row">
+        <nav
+          aria-label={t("live.nav.aria")}
+          className="flex-none border-b border-border px-3 py-[18px] lg:w-[250px] lg:overflow-y-auto lg:border-b-0 lg:border-r"
+        >
+          {/* The chapter the session plays. The topbar carries one session
+              chip and nothing more, so the chapter title belongs here — next to
+              the scenes it describes. */}
+          {chapter !== undefined && (
+            <p className="px-2 pb-3 font-serif text-[14px] text-foreground">{chapter.title}</p>
           )}
-        </div>
-        {contingencies.length > 0 && (
-          <>
-            <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-              {t("scene.contingencies.heading")}
-            </p>
-            <div className="mb-6 flex flex-col gap-0.5">
-              {contingencies.map((scene) => (
-                <SceneNavRow
-                  key={scene.id}
-                  scene={scene}
-                  active={scene.id === selected?.id}
-                  onPick={() => setSelectedId(scene.id)}
-                />
-              ))}
-            </div>
-          </>
-        )}
-        {done.length > 0 && (
-          <PlayedGroup
-            scenes={done}
-            selectedId={selected?.id}
-            onPick={setSelectedId}
-          />
-        )}
-      </nav>
-
-      <main className="min-w-0 flex-1 lg:overflow-y-auto">
-        <div className="mx-auto max-w-[680px] px-7 pt-[30px] pb-[100px]">
-          {selected === undefined ? (
-            <p className="text-muted-foreground">{t("live.scene.none")}</p>
-          ) : (
-            // A `[[slug]]` in the scene text behaves like the aside cards
-            // here: the click opens the DRAWER instead of navigating away
-            // — the selected scene and the half-typed
-            // quick note survive it.
-            <>
-              <RefDrawerTarget onOpen={setDrawerTarget}>
-                {/* Keyed by the scene: a switch REMOUNTS the column instead of
-                    reconciling the new text into the old nodes. Without it the
-                    `## If:` branches the DM opened in one scene would stay open
-                    in the next one — the branches start collapsed per scene and
-                    nothing is remembered across a switch. */}
-                <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
-              </RefDrawerTarget>
-              {next !== undefined && (
-                // Keyed by the scene it leaves: the played box starts
-                // over in every scene.
-                <NextSceneStep
-                  key={selected.id}
-                  session={session.data}
-                  left={selected.id}
-                  next={next}
-                  markPlayed={markPlayed}
-                  onNext={setSelectedId}
-                />
-              )}
-            </>
-          )}
-        </div>
-      </main>
-
-      <aside className="flex w-full flex-none flex-col border-t border-border lg:min-h-0 lg:w-[300px] lg:border-t-0 lg:border-l">
-        <div className="flex flex-col gap-3 px-4 py-[18px] lg:flex-1 lg:overflow-y-auto">
-          {/* What the players should get or hear TONIGHT — above the scene
-              cards, because it is about the table, not
-              about the scene. Renders nothing when there is nothing. */}
-          <PcReminders campaign={campaign} />
-          {locationId !== undefined && (
-            <>
-              <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-                {t("live.scene.locationHeading")}
-              </p>
-              {knownLocation !== undefined ? (
-                // The tree knows the location: the card reads it from its
-                // own resource by its id (decisions/resources).
-                <LocationCard campaign={campaign} id={knownLocation.id} onOpen={setDrawerTarget} />
-              ) : (
-                // A free-text location (no entry behind it) is exactly
-                // what the format allows — show it, claim nothing.
-                <p className="text-[12.5px] leading-[1.5] text-body-secondary">{locationId}</p>
-              )}
-            </>
-          )}
-          <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-            {t("live.scene.npcsHeading")}
+          <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+            {t("scene.planned.heading")}
           </p>
-          {(selected?.npcs ?? []).map((id) => (
-            <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerTarget} />
-          ))}
-          {(selected?.npcs ?? []).length === 0 && (
-            <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
+          <div className="mb-6 flex flex-col gap-0.5">
+            {planned.map((scene) => (
+              <SceneNavRow
+                key={scene.id}
+                scene={scene}
+                active={scene.id === selected?.id}
+                onPick={() => setSelectedId(scene.id)}
+              />
+            ))}
+            {planned.length === 0 && (
+              <p className="px-2 text-[12.5px] text-muted-foreground">
+                {t("live.nav.noPlanned")}
+              </p>
+            )}
+          </div>
+          {contingencies.length > 0 && (
+            <>
+              <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                {t("scene.contingencies.heading")}
+              </p>
+              <div className="mb-6 flex flex-col gap-0.5">
+                {contingencies.map((scene) => (
+                  <SceneNavRow
+                    key={scene.id}
+                    scene={scene}
+                    active={scene.id === selected?.id}
+                    onPick={() => setSelectedId(scene.id)}
+                  />
+                ))}
+              </div>
+            </>
           )}
-        </div>
-        <SessionLog campaign={campaign} session={session.data} activeSceneId={selected?.id} />
-      </aside>
+          {done.length > 0 && (
+            <PlayedGroup
+              scenes={done}
+              selectedId={selected?.id}
+              onPick={setSelectedId}
+            />
+          )}
+        </nav>
 
-      {/* A reference INSIDE the drawer switches the drawer, it does not
-          navigate either — same rule, one level deeper. */}
+        <main className="min-w-0 flex-1 lg:overflow-y-auto">
+          <div className="mx-auto max-w-[680px] px-7 pt-[30px] pb-[100px]">
+            {selected === undefined ? (
+              <p className="text-muted-foreground">{t("live.scene.none")}</p>
+            ) : (
+              // A `[[slug]]` in the scene text behaves like the aside cards
+              // here: the click opens the DRAWER instead of navigating away
+              // — the selected scene and the half-typed
+              // quick note survive it.
+              <>
+                <RefDrawerTarget onOpen={setDrawerTarget}>
+                  {/* Keyed by the scene: a switch REMOUNTS the column instead of
+                      reconciling the new text into the old nodes. Without it the
+                      `## If:` branches the DM opened in one scene would stay open
+                      in the next one — the branches start collapsed per scene and
+                      nothing is remembered across a switch. */}
+                  <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
+                </RefDrawerTarget>
+                {next !== undefined && (
+                  // Keyed by the scene it leaves: the played box starts
+                  // over in every scene.
+                  <NextSceneStep
+                    key={selected.id}
+                    session={session.data}
+                    left={selected.id}
+                    next={next}
+                    markPlayed={markPlayed}
+                    onNext={setSelectedId}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </main>
+
+        <aside className="flex w-full flex-none flex-col border-t border-border lg:min-h-0 lg:w-[300px] lg:border-t-0 lg:border-l">
+          <div className="flex flex-col gap-3 px-4 py-[18px] lg:flex-1 lg:overflow-y-auto">
+            {/* What the players should get or hear TONIGHT — above the scene
+                cards, because it is about the table, not
+                about the scene. Renders nothing when there is nothing. */}
+            <PcReminders campaign={campaign} />
+            {locationId !== undefined && (
+              <>
+                <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                  {t("live.scene.locationHeading")}
+                </p>
+                {knownLocation !== undefined ? (
+                  // The tree knows the location: the card reads it from its
+                  // own resource by its id (decisions/resources).
+                  <LocationCard campaign={campaign} id={knownLocation.id} onOpen={setDrawerTarget} />
+                ) : (
+                  // A free-text location (no entry behind it) is exactly
+                  // what the format allows — show it, claim nothing.
+                  <p className="text-[12.5px] leading-[1.5] text-body-secondary">{locationId}</p>
+                )}
+              </>
+            )}
+            <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+              {t("live.scene.npcsHeading")}
+            </p>
+            {(selected?.npcs ?? []).map((id) => (
+              <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerTarget} />
+            ))}
+            {(selected?.npcs ?? []).length === 0 && (
+              <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
+            )}
+          </div>
+          <SessionLog campaign={campaign} session={session.data} activeSceneId={selected?.id} />
+        </aside>
+
+        {/* A reference INSIDE the drawer switches the drawer, it does not
+            navigate either — same rule, one level deeper. */}
+        <RefDrawerTarget onOpen={setDrawerTarget}>
+          <LiveDrawer
+            campaign={campaign}
+            target={drawerTarget}
+            onClose={() => setDrawerTarget(undefined)}
+          />
+        </RefDrawerTarget>
+      </div>
+
+      {/* A reference in a reply opens the drawer like one in the scene text:
+          the conversation lives only in the chat's state, and leaving the
+          live route would end it. At lg the button and the popup stand left
+          of the aside, so nothing covers the quick note. */}
       <RefDrawerTarget onOpen={setDrawerTarget}>
-        <LiveDrawer
+        <QuickIdeas
           campaign={campaign}
-          target={drawerTarget}
-          onClose={() => setDrawerTarget(undefined)}
+          session={session.data.id}
+          scene={selected?.id}
+          anchor="right-7 bottom-7 lg:right-[calc(300px+1.75rem)]"
         />
       </RefDrawerTarget>
     </div>
